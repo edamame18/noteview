@@ -267,10 +267,26 @@ async function openDB(){
     r.onerror=()=>rej(r.error);
   });
 }
-const idbSet=(k,v)=>new Promise((res,rej)=>{const tx=_db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});
+/* ─────────────────────────────────────────
+   IndexedDB — 複数 Blob を1トランザクションで一括保存
+   iOS Safari は readwrite tx を await 跨ぎで呼ぶと
+   前の値で上書きされるバグがあるため、必ず1回の tx にまとめる
+───────────────────────────────────────── */
 const idbGet=(k)=>new Promise((res,rej)=>{const tx=_db.transaction(STORE,'readonly');const r=tx.objectStore(STORE).get(k);r.onsuccess=()=>res(r.result||null);r.onerror=()=>rej(r.error)});
 const idbDel=(k)=>new Promise((res,rej)=>{const tx=_db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});
 const idbKeys=()=>new Promise((res,rej)=>{const tx=_db.transaction(STORE,'readonly');const r=tx.objectStore(STORE).getAllKeys();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+
+/** 複数の {key, blob} を1トランザクションで一括書き込み */
+function idbPutMany(entries){
+  return new Promise((res,rej)=>{
+    const tx=_db.transaction(STORE,'readwrite');
+    const store=tx.objectStore(STORE);
+    for(const {key,blob} of entries) store.put(blob,key);
+    tx.oncomplete=res;
+    tx.onerror=()=>rej(tx.error);
+    tx.onabort=()=>rej(tx.error);
+  });
+}
 
 /* ─────────────────────────────────────────
    BlobURL キャッシュ (LRU, 上限10件)
@@ -886,14 +902,25 @@ document.getElementById('btnCreate').onclick=async()=>{
   const id='dk'+Date.now();
   const name=document.getElementById('cName').value.trim();
   const subj=document.getElementById('cSubj').value.trim()||'未分類';
-  const keys=[];
+
+  // ① 圧縮を全部終わらせてから IDB に書く
+  //    await を IDB put の間に挟むと iOS Safari で全ページ同一になるバグがある
+  const compressed=[];
   for(let i=0;i<_files.length;i++){
-    btn.textContent=`保存中… /`;
-    const compressed=await compressImage(_files[i]);
-    const k=`_`;
-    await idbSet(k,compressed);
-    keys.push(k);
+    btn.textContent=`圧縮中… /`;
+    compressed.push(await compressImage(_files[i]));
   }
+
+  // ② 1トランザクションで全ページを一括保存
+  btn.textContent='保存中…';
+  const keys=[];
+  const entries=compressed.map((blob,i)=>{
+    const key=`_`;
+    keys.push(key);
+    return {key,blob};
+  });
+  await idbPutMany(entries);
+
   const deck={id,name,subject:subj,color:_color,pages:keys,created:new Date().toLocaleDateString('ja-JP')};
   decks.push(deck);saveMeta(decks);
   btn.textContent='作成する';btn.disabled=false;
