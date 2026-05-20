@@ -10,7 +10,6 @@
 <!-- PWA manifest (inline data URI) -->
 <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22NoteView%22,%22short_name%22:%22NoteView%22,%22start_url%22:%22./%22,%22display%22:%22standalone%22,%22background_color%22:%22%23f2f2f7%22,%22theme_color%22:%22%23f2f2f7%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff9500'/%3E%3Ctext y='.9em' font-size='80' x='10'%3E📖%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]}">
 <title>NoteView</title>
-<link rel="manifest" href="manifest.json">
 <style>
 /* ══════════════════════════════════════
    RESET
@@ -779,22 +778,31 @@ window.addEventListener('resize',()=>{if(pgCnt)sizeBook()},{passive:true});
 /* ── deck を開く ── */
 async function openDeck(id){
   const d=decks.find(x=>x.id===id);if(!d)return;
+
+  // deck 切り替え時に前 deck の BlobURL キャッシュを全破棄
+  // これをしないと別 deck で同じ画像が表示されるバグが起きる
+  if(curId!==id) lruRevokeAll();
+
   curId=id;
   showViewer();
-  // loading
+
   const ld=mkLoading();
   document.getElementById('vEmpty').style.display='none';
   stageEl.style.display='flex';
   document.getElementById('ctrl').style.display='flex';
   stageEl.appendChild(ld);
-  // 仮想化初期化
-  pageKeys=d.pages||[];pgCnt=pageKeys.length;curPg=0;
+
+  // pageKeys/pgCnt/curPg を先にセットしてから DOM 操作
   clearDomPages();
-  // 先頭+前後PRELOAD枚のみロード
+  pageKeys=d.pages||[];
+  pgCnt=pageKeys.length;
+  curPg=0;
+
   await loadWindowAround(0,ld);
   ld.remove();
   sizeBook();
-  applyStates();updCtrl();
+  applyStates();
+  updCtrl();
   buildGrid();
   renderLib();
 }
@@ -981,12 +989,14 @@ function chainFlip(from,to,dir,done){
 
 /* ── UI 更新 ── */
 function updCtrl(){
-  document.getElementById('pgPill').textContent=pgCnt?` / `:'— / —';
-  const p=pgCnt<=1?100:(curPg/(pgCnt-1))*100;
+  const pill=document.getElementById('pgPill');
+  // pgCnt が 0 のときだけ EM ダッシュ、それ以外は必ず数値を出す
+  pill.textContent=(pgCnt>0)?` / `:'— / —';
+  const p=(pgCnt<=1)?100:(curPg/(pgCnt-1))*100;
   document.getElementById('slFill').style.width=p+'%';
   document.getElementById('slKnob').style.left=p+'%';
-  document.getElementById('btnPrev').disabled=curPg===0;
-  document.getElementById('btnNext').disabled=curPg===pgCnt-1;
+  document.getElementById('btnPrev').disabled=(curPg===0);
+  document.getElementById('btnNext').disabled=(curPg>=pgCnt-1);
   document.querySelectorAll('.gp-th').forEach((el,i)=>el.classList.toggle('cur',i===curPg));
 }
 
@@ -1064,12 +1074,14 @@ function buildGrid(){
       if(!entry.isIntersecting)return;
       const idx=parseInt(entry.target.dataset.idx,10);
       const img=entry.target.querySelector('img');
-      if(img&&!img.src){
+      // !img.src だと空文字列("") が falsy にならない場合があるため明示チェック
+      if(img&&!img.getAttribute('src')){
         getBlobUrl(pageKeys[idx]).then(u=>{if(u&&img)img.src=u});
       }
       _thumbObserver.unobserve(entry.target);
     });
-  },{root:g.parentElement,rootMargin:'40px'});
+  // root を null (viewport) にして、grid が閉じていても observe できるようにする
+  },{rootMargin:'200px'});
 
   pageKeys.forEach((k,i)=>{
     const t=document.createElement('div');
@@ -1093,8 +1105,19 @@ function openGrid(){
   gridOpen=true;
   document.getElementById('gridPanel').classList.add('open');
   document.getElementById('btnGrid').classList.add('grid-on');
-  const cur=document.querySelector('.gp-th.cur');
-  if(cur)cur.scrollIntoView({block:'nearest',behavior:'smooth'});
+  // グリッドが開いた瞬間に未ロードサムネを一括ロード
+  // (IntersectionObserver が closed 状態で observe に失敗するケースの保険)
+  requestAnimationFrame(()=>{
+    document.querySelectorAll('.gp-th').forEach(el=>{
+      const img=el.querySelector('img');
+      if(img&&!img.getAttribute('src')){
+        const idx=parseInt(el.dataset.idx,10);
+        getBlobUrl(pageKeys[idx]).then(u=>{if(u&&img)img.src=u});
+      }
+    });
+    const cur=document.querySelector('.gp-th.cur');
+    if(cur)cur.scrollIntoView({block:'nearest',behavior:'smooth'});
+  });
 }
 function closeGrid(){
   gridOpen=false;
@@ -1282,9 +1305,6 @@ document.addEventListener('visibilitychange',()=>{
   // 最後に開いていたデッキを復元
   if(decks.length) await openDeck(decks[decks.length-1].id);
 })();
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js');
-}
 </script>
 </body>
 </html>
