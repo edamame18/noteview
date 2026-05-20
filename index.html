@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#f2f2f7">
+<meta name="apple-mobile-web-app-title" content="NoteView">
+<!-- PWA manifest (inline data URI) -->
+<link rel="manifest" href="data:application/manifest+json,{%22name%22:%22NoteView%22,%22short_name%22:%22NoteView%22,%22start_url%22:%22./%22,%22display%22:%22standalone%22,%22background_color%22:%22%23f2f2f7%22,%22theme_color%22:%22%23f2f2f7%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff9500'/%3E%3Ctext y='.9em' font-size='80' x='10'%3E📖%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]}">
+<title>NoteView</title>
+<style>
+/* ══════════════════════════════════════
+   RESET
+══════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none;background:#f2f2f7}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Yu Gothic",sans-serif;
+  color:#1c1c1e;-webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;
+}
+
+/* ══════════════════════════════════════
+   CSS VARIABLES (iOS system palette)
+══════════════════════════════════════ */
+:root{
+  --sat:env(safe-area-inset-top,44px);
+  --sab:env(safe-area-inset-bottom,0px);
+  --nav-h:44px;
+  --tab-h:49px;
+  --orange:#ff9500;--blue:#007aff;--red:#ff3b30;--green:#34c759;
+  --gray:#8e8e93;--gray4:#d1d1d6;--gray5:#e5e5ea;
+  --bg:#fff;--bg2:#f2f2f7;
+  --label:#1c1c1e;--label2:#636366;--label3:#8e8e93;
+  --fill2:rgba(120,120,128,.16);--fill3:rgba(120,120,128,.12);
+  --sep:rgba(60,60,67,.29);
+  --top:calc(var(--sat) + var(--nav-h));
+  --bot:calc(var(--sab) + var(--tab-h));
+}
+@media(prefers-color-scheme:dark){
+  html,body{background:#000}
+  :root{
+    --bg:#1c1c1e;--bg2:#000;--label:#fff;
+    --label2:rgba(235,235,245,.6);--label3:rgba(235,235,245,.3);
+    --fill2:rgba(120,120,128,.36);--fill3:rgba(120,120,128,.24);
+    --sep:rgba(84,84,88,.6);--gray4:#3a3a3c;--gray5:#2c2c2e;
+  }
+}
+
+/* ══════════════════════════════════════
+   NAV BAR
+   backdrop-filter を nav/tab だけに限定し GPU 負荷を最小化
+══════════════════════════════════════ */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:300;
+  height:var(--top);padding-top:var(--sat);
+  display:flex;align-items:flex-end;
+  background:rgba(242,242,247,.92);
+  border-bottom:1px solid var(--sep);
+  /* blur は 1 レイヤーのみ・半径を抑える */
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+@media(prefers-color-scheme:dark){.nav{background:rgba(0,0,0,.88)}}
+.nav-inner{width:100%;height:var(--nav-h);display:flex;align-items:center;padding:0 8px;position:relative}
+.nav-title{
+  position:absolute;left:50%;transform:translateX(-50%);
+  font-size:17px;font-weight:600;color:var(--label);
+  white-space:nowrap;max-width:55%;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+}
+.nav-l,.nav-r{display:flex;align-items:center}
+.nav-r{margin-left:auto}
+.nav-btn{
+  font-family:inherit;font-size:17px;font-weight:400;
+  color:var(--blue);background:none;border:none;
+  padding:8px 8px;cursor:pointer;white-space:nowrap;
+  -webkit-tap-highlight-color:transparent;
+}
+.nav-btn:active{opacity:.4}
+.nav-btn.w{font-weight:600}
+
+/* ══════════════════════════════════════
+   TAB BAR
+══════════════════════════════════════ */
+.tab{
+  position:fixed;bottom:0;left:0;right:0;z-index:300;
+  height:var(--bot);padding-bottom:var(--sab);
+  display:flex;align-items:flex-start;
+  background:rgba(242,242,247,.92);
+  border-top:1px solid var(--sep);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+@media(prefers-color-scheme:dark){.tab{background:rgba(0,0,0,.88)}}
+.tab-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:8px 0 2px;background:none;border:none;cursor:pointer;font-family:inherit;
+  -webkit-tap-highlight-color:transparent;
+}
+.tab-item:active{opacity:.5}
+.tab-ico{font-size:22px;line-height:1.2}
+.tab-lbl{font-size:10px;font-weight:500;color:var(--gray)}
+.tab-item.on .tab-lbl{color:var(--orange)}
+
+/* ══════════════════════════════════════
+   SCREENS
+══════════════════════════════════════ */
+#scLib{
+  position:fixed;top:var(--top);left:0;right:0;bottom:var(--bot);
+  background:var(--bg2);overflow-y:auto;-webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+}
+#scLib::-webkit-scrollbar{display:none}
+
+#scViewer{
+  position:fixed;top:var(--top);left:0;right:0;bottom:var(--bot);
+  background:var(--bg2);display:flex;flex-direction:column;
+  /* translateX のみ — GPU合成を 2D に留める */
+  transform:translateX(100%);
+  transition:transform .28s cubic-bezier(.4,0,.2,1);
+  /* will-change はアニメーション中のみ付与（JS で制御）*/
+}
+#scViewer.show{transform:translateX(0)}
+
+#scCreate{
+  position:fixed;bottom:0;left:0;right:0;z-index:400;
+  display:flex;flex-direction:column;justify-content:flex-end;
+  transform:translateY(100%);
+  transition:transform .32s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+#scCreate.show{transform:translateY(0);pointer-events:all}
+.create-mask{
+  position:fixed;inset:0;z-index:-1;
+  background:rgba(0,0,0,.45);opacity:0;transition:opacity .32s;pointer-events:none;
+}
+#scCreate.show .create-mask{opacity:1;pointer-events:all}
+
+/* ══════════════════════════════════════
+   LIBRARY
+══════════════════════════════════════ */
+.lib-hd{font-size:13px;font-weight:600;color:var(--label2);letter-spacing:.06em;text-transform:uppercase;padding:20px 16px 8px}
+.deck-list{padding:0 16px 20px}
+.deck-card{
+  display:flex;align-items:center;gap:12px;
+  background:var(--bg);border-radius:12px;padding:12px;margin-bottom:10px;cursor:pointer;
+  /* drop-shadow → box-shadow に変更（GPU 負荷削減）*/
+  box-shadow:0 1px 3px rgba(0,0,0,.08),0 0 0 .5px rgba(0,0,0,.04);
+  transition:background .1s;
+}
+.deck-card:active{background:var(--gray5)}
+.deck-thumb{
+  width:50px;height:66px;border-radius:6px;overflow:hidden;flex-shrink:0;
+  background:var(--gray5);box-shadow:0 1px 4px rgba(0,0,0,.14);
+}
+.deck-thumb img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.deck-thumb-ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:20px}
+.deck-info{flex:1;min-width:0}
+.deck-name{font-size:15px;font-weight:600;color:var(--label);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deck-meta{font-size:12px;color:var(--label3);margin-top:3px}
+.deck-tag{display:inline-block;margin-top:5px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.deck-chev{color:var(--gray4);font-size:17px;flex-shrink:0}
+.deck-del{
+  display:none;padding:6px 12px;border-radius:8px;
+  background:rgba(255,59,48,.12);border:1px solid rgba(255,59,48,.3);
+  color:var(--red);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;
+  font-family:inherit;flex-shrink:0;
+}
+.lib-empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;padding:60px 24px;text-align:center;min-height:40vh;
+}
+.lib-empty-ico{font-size:48px}
+.lib-empty-t{font-size:20px;font-weight:700;color:var(--label)}
+.lib-empty-b{font-size:15px;color:var(--label2);line-height:1.5}
+.lib-empty-btn{
+  padding:12px 28px;background:var(--blue);color:#fff;
+  border:none;border-radius:12px;cursor:pointer;
+  font-family:inherit;font-size:15px;font-weight:600;-webkit-tap-highlight-color:transparent;
+}
+.lib-empty-btn:active{opacity:.7}
+
+/* ══════════════════════════════════════
+   VIEWER — stage & book
+══════════════════════════════════════ */
+.stage{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;position:relative;padding:12px 10px 8px;min-height:0;
+}
+.book{
+  position:relative;flex-shrink:0;
+  /* box-shadow のみ — drop-shadow(filter) はGPU合成レイヤーを増やす */
+  box-shadow:0 6px 24px rgba(0,0,0,.22),0 1px 4px rgba(0,0,0,.1);
+  border-radius:2px 10px 10px 2px;
+}
+/* 紙の重なり演出 (2枚の擬似要素) */
+.book::before,.book::after{
+  content:'';position:absolute;top:0;border-radius:2px 10px 10px 2px;pointer-events:none;
+}
+.book::before{
+  width:100%;height:100%;
+  transform:translate(5px,4px);
+  background:#d8d3c8;z-index:-2;
+}
+.book::after{
+  width:100%;height:100%;
+  transform:translate(2px,2px);
+  background:#e8e3d8;z-index:-1;
+}
+
+/* ── page cards ──
+   rotateY は引き続き使うが、will-change を static に置かず
+   アニメーション中だけ JS で付与 → GPU レイヤー常駐を防ぐ */
+.pcard{
+  position:absolute;inset:0;
+  border-radius:2px 10px 10px 2px;
+  background:#f8f3e8;
+  transform-origin:left center;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  pointer-events:none;
+}
+.pcard img{
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:contain;object-position:top center;
+  display:block;background:#f8f3e8;
+  border-radius:2px 10px 10px 2px;
+  -webkit-user-drag:none;pointer-events:none;
+}
+/* spine shadow — 軽量な疑似要素グラデ */
+.pcard::after{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:10px;
+  background:linear-gradient(to right,rgba(0,0,0,.08),transparent);
+  z-index:1;pointer-events:none;
+}
+
+/* ── コントロールバー ── */
+.ctrl{
+  flex-shrink:0;background:var(--bg);border-top:1px solid var(--sep);
+  padding:10px 14px 12px;display:flex;flex-direction:column;gap:8px;
+}
+.pg-pill-row{display:flex;justify-content:center;align-items:center}
+.pg-pill{
+  background:var(--fill2);border-radius:100px;
+  padding:5px 20px;font-size:15px;font-weight:700;
+  color:var(--label);min-width:80px;text-align:center;
+}
+.ctrl-row{display:flex;align-items:center;gap:8px}
+.ctrl-btn{
+  width:48px;height:48px;border-radius:12px;
+  background:var(--fill3);border:none;
+  color:var(--label);font-size:22px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;font-family:inherit;
+  -webkit-tap-highlight-color:transparent;transition:background .1s;
+}
+.ctrl-btn:active{background:var(--fill2);transform:scale(.9)}
+.ctrl-btn:disabled{opacity:.28;pointer-events:none}
+.ctrl-btn.grid-on{background:rgba(255,149,0,.18);color:var(--orange)}
+.sl-wrap{flex:1;height:48px;display:flex;align-items:center;padding:0 2px}
+.sl-track{width:100%;height:4px;border-radius:2px;background:var(--gray4);position:relative;cursor:pointer}
+.sl-fill{height:100%;border-radius:2px;background:var(--orange);pointer-events:none}
+.sl-knob{
+  position:absolute;top:50%;width:24px;height:24px;border-radius:50%;
+  background:#fff;box-shadow:0 0 0 .5px rgba(0,0,0,.1),0 2px 8px rgba(0,0,0,.2);
+  transform:translate(-50%,-50%);pointer-events:none;
+}
+.ctrl-hint{display:flex;justify-content:space-between;padding:0 2px}
+.ctrl-hint span{font-size:10px;color:var(--label3)}
+
+/* ── ページグリッド（仮想化サムネ対応） ── */
+.grid-panel{
+  position:absolute;left:0;right:0;bottom:0;z-index:50;
+  overflow:hidden;max-height:0;
+  transition:max-height .22s cubic-bezier(.4,0,.2,1);
+  background:var(--bg);border-top:1px solid var(--sep);
+}
+.grid-panel.open{max-height:46vh}
+.gp-head{display:flex;align-items:center;padding:10px 14px 6px;border-bottom:1px solid var(--sep)}
+.gp-title{flex:1;font-size:13px;font-weight:600;color:var(--label2);letter-spacing:.06em;text-transform:uppercase}
+.gp-close{
+  width:26px;height:26px;border-radius:50%;background:var(--fill3);border:none;
+  font-size:12px;color:var(--label2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;
+}
+.gp-close:active{background:var(--fill2)}
+.gp-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));
+  gap:7px;padding:8px 12px 12px;
+  overflow-y:auto;max-height:calc(46vh - 42px);-webkit-overflow-scrolling:touch;
+}
+.gp-grid::-webkit-scrollbar{display:none}
+.gp-th{
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  cursor:pointer;border-radius:8px;padding:4px;border:2px solid transparent;
+  -webkit-tap-highlight-color:transparent;
+}
+.gp-th:active{background:var(--fill3)}
+.gp-th.cur{border-color:var(--orange);background:rgba(255,149,0,.09)}
+/* サムネ img — 実際の画像URLを使わず canvas で生成するため <canvas> を使う */
+.gp-th canvas,.gp-th img{
+  width:100%;aspect-ratio:3/4;object-fit:cover;object-position:top;
+  border-radius:5px;background:#f8f3e8;box-shadow:0 1px 3px rgba(0,0,0,.1);display:block;
+}
+.gp-n{font-size:10px;color:var(--label3)}
+.gp-th.cur .gp-n{color:var(--orange);font-weight:700}
+
+/* ── empty ── */
+.v-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:32px}
+.v-empty-ico{font-size:48px}
+.v-empty-t{font-size:20px;font-weight:700;color:var(--label)}
+.v-empty-b{font-size:15px;color:var(--label2);line-height:1.5}
+
+/* ══════════════════════════════════════
+   CREATE SHEET
+══════════════════════════════════════ */
+.sheet{
+  background:var(--bg2);border-radius:14px 14px 0 0;
+  max-height:90vh;display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 -2px 20px rgba(0,0,0,.16);
+}
+.sheet-grip-row{display:flex;justify-content:center;padding:10px 0 4px;flex-shrink:0}
+.sheet-grip{width:36px;height:4px;border-radius:2px;background:var(--gray4)}
+.sheet-title{text-align:center;font-size:17px;font-weight:700;color:var(--label);padding:4px 16px 12px;flex-shrink:0;border-bottom:1px solid var(--sep)}
+.sheet-body{overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;touch-action:pan-y}
+.sheet-body::-webkit-scrollbar{display:none}
+.ios-label{font-size:13px;color:var(--label2);padding:16px 20px 6px}
+.ios-group{background:var(--bg);border-radius:12px;margin:0 16px;overflow:hidden}
+.ios-row{display:flex;align-items:center;min-height:44px;border-bottom:1px solid var(--sep);padding:0 14px}
+.ios-row:last-child{border-bottom:none}
+.ios-row-l{font-size:17px;color:var(--label);min-width:68px;flex-shrink:0}
+.ios-inp{
+  flex:1;background:none;border:none;outline:none;
+  font-family:inherit;font-size:17px;color:var(--label);padding:10px 0;
+  touch-action:auto;-webkit-user-select:text;user-select:text;
+}
+.ios-inp::placeholder{color:var(--label3)}
+.color-row{display:flex;gap:10px;flex-wrap:wrap;padding:12px 14px}
+.csw{
+  width:30px;height:30px;border-radius:50%;cursor:pointer;
+  border:2.5px solid transparent;transition:transform .12s;-webkit-tap-highlight-color:transparent;
+}
+.csw:active{transform:scale(.85)}
+.csw.on{border-color:rgba(255,255,255,.9);outline:2px solid rgba(0,0,0,.2);outline-offset:1px;transform:scale(1.14)}
+.dropzone{
+  margin:0 16px;border-radius:12px;border:2px dashed var(--gray4);background:var(--bg);
+  padding:24px 16px;text-align:center;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  transition:border-color .15s,background .15s;touch-action:auto;
+}
+.dropzone:active,.dropzone.drag{border-color:var(--orange);background:rgba(255,149,0,.05)}
+.dropzone.has{border-color:var(--green);background:rgba(52,199,89,.05)}
+.dz-ico{font-size:28px}.dz-txt{font-size:15px;color:var(--label2)}
+.dz-cnt{font-size:15px;font-weight:700;color:var(--green);display:none}
+.dropzone.has .dz-cnt{display:block}.dropzone.has .dz-txt{display:none}
+.sheet-foot{
+  flex-shrink:0;display:flex;gap:10px;
+  padding:12px 16px calc(var(--sab) + 12px);
+  border-top:1px solid var(--sep);background:var(--bg2);
+}
+.sh-btn{
+  flex:1;padding:14px;border-radius:12px;border:none;cursor:pointer;
+  font-family:inherit;font-size:17px;font-weight:600;
+  -webkit-tap-highlight-color:transparent;transition:opacity .1s;
+}
+.sh-btn:active{opacity:.6}
+.sh-btn.cancel{background:var(--fill2);color:var(--label)}
+.sh-btn.go{background:var(--orange);color:#fff}
+.sh-btn:disabled{opacity:.3;pointer-events:none}
+
+/* ── ローディング / プログレス ── */
+.loading{
+  position:absolute;inset:0;z-index:99;background:var(--bg2);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+}
+.spinner{
+  width:28px;height:28px;border-radius:50%;
+  border:3px solid var(--gray4);border-top-color:var(--orange);
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-txt{font-size:14px;color:var(--label2)}
+.progress-bar{
+  width:200px;height:4px;border-radius:2px;
+  background:var(--gray4);overflow:hidden;
+}
+.progress-fill{height:100%;border-radius:2px;background:var(--orange);transition:width .15s}
+
+/* ── toast ── */
+.toast{
+  position:fixed;bottom:calc(var(--bot) + 12px);left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.78);color:#fff;border-radius:20px;
+  padding:8px 18px;font-size:13px;white-space:nowrap;
+  pointer-events:none;opacity:0;transition:opacity .2s;z-index:500;
+}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <div class="nav-l" id="navL"></div>
+    <div class="nav-title" id="navTitle">ライブラリ</div>
+    <div class="nav-r" id="navR">
+      <button class="nav-btn w" onclick="openCreate()">＋ 追加</button>
+    </div>
+  </div>
+</nav>
+
+<!-- LIBRARY -->
+<div id="scLib"><div id="libContent"></div></div>
+
+<!-- VIEWER -->
+<div id="scViewer">
+  <div class="v-empty" id="vEmpty">
+    <div class="v-empty-ico">📄</div>
+    <div class="v-empty-t">ノート未選択</div>
+    <div class="v-empty-b">ライブラリからノートを選んでください</div>
+  </div>
+  <div class="stage" id="stage" style="display:none">
+    <div class="grid-panel" id="gridPanel">
+      <div class="gp-head">
+        <div class="gp-title" id="gpTitle">ページ一覧</div>
+        <button class="gp-close" id="gpClose">✕</button>
+      </div>
+      <div class="gp-grid" id="gpGrid"></div>
+    </div>
+    <div class="book" id="book"></div>
+  </div>
+  <div class="ctrl" id="ctrl" style="display:none">
+    <div class="pg-pill-row">
+      <div class="pg-pill" id="pgPill">— / —</div>
+    </div>
+    <div class="ctrl-row">
+      <button class="ctrl-btn" id="btnPrev" disabled title="前のページ">‹</button>
+      <div class="sl-wrap">
+        <div class="sl-track" id="slTrack">
+          <div class="sl-fill" id="slFill" style="width:0%"></div>
+          <div class="sl-knob" id="slKnob" style="left:0%"></div>
+        </div>
+      </div>
+      <button class="ctrl-btn" id="btnGrid" title="ページ一覧">⊞</button>
+      <button class="ctrl-btn" id="btnNext" disabled title="次のページ">›</button>
+    </div>
+    <div class="ctrl-hint">
+      <span>前のページ</span><span>ページ一覧</span><span>次のページ</span>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE SHEET -->
+<div id="scCreate">
+  <div class="create-mask" id="createMask"></div>
+  <div class="sheet">
+    <div class="sheet-grip-row"><div class="sheet-grip"></div></div>
+    <div class="sheet-title">新しいノートを追加</div>
+    <div class="sheet-body" id="sheetBody">
+      <div class="ios-label">基本情報</div>
+      <div class="ios-group">
+        <div class="ios-row">
+          <div class="ios-row-l">名前</div>
+          <input class="ios-inp" id="cName" type="text" placeholder="例：数学 解答" maxlength="50" autocomplete="off" autocorrect="off">
+        </div>
+        <div class="ios-row">
+          <div class="ios-row-l">科目</div>
+          <input class="ios-inp" id="cSubj" type="text" placeholder="例：数学Ⅱ" maxlength="30" autocomplete="off" autocorrect="off">
+        </div>
+      </div>
+      <div class="ios-label">カラー</div>
+      <div class="ios-group"><div class="color-row" id="colorRow"></div></div>
+      <div class="ios-label">画像（複数選択可 · 選択順がページ順）</div>
+      <div class="dropzone" id="dropzone">
+        <div class="dz-ico">🖼️</div>
+        <div class="dz-txt">タップして画像を選択</div>
+        <div class="dz-cnt" id="dzCnt"></div>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
+      <div style="height:16px"></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="sh-btn cancel" id="btnCancel">キャンセル</button>
+      <button class="sh-btn go" id="btnCreate" disabled>作成する</button>
+    </div>
+  </div>
+</div>
+
+<!-- TAB BAR -->
+<nav class="tab">
+  <button class="tab-item on" id="tabLib" onclick="showLib()">
+    <div class="tab-ico">📚</div><div class="tab-lbl">ライブラリ</div>
+  </button>
+  <button class="tab-item" id="tabView" onclick="showViewer()">
+    <div class="tab-ico">📖</div><div class="tab-lbl">ビューワー</div>
+  </button>
+  <button class="tab-item" id="tabAdd" onclick="openCreate()">
+    <div class="tab-ico">➕</div><div class="tab-lbl">新規作成</div>
+  </button>
+</nav>
+
+<!-- toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* ══════════════════════════════════════════════════════
+   IndexedDB helper
+   Store: 'imgs' — key: imgKey (string), value: Blob
+══════════════════════════════════════════════════════ */
+const DB_NAME='nv3',DB_VER=1,STORE='imgs',META_KEY='nv3_meta';
+let _db=null;
+
+function openDB(){
+  return new Promise((res,rej)=>{
+    if(_db){res(_db);return}
+    const r=indexedDB.open(DB_NAME,DB_VER);
+    r.onupgradeneeded=e=>e.target.result.createObjectStore(STORE);
+    r.onsuccess=e=>{_db=e.target.result;res(_db)};
+    r.onerror=()=>rej(r.error);
+  });
+}
+function idbSet(k,v){return new Promise((res,rej)=>{const tx=_db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);})}
+function idbGet(k){return new Promise((res,rej)=>{const tx=_db.transaction(STORE,'readonly');const r=tx.objectStore(STORE).get(k);r.onsuccess=()=>res(r.result||null);r.onerror=()=>rej(r.error);})}
+function idbDel(k){return new Promise((res,rej)=>{const tx=_db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);})}
+function idbHas(k){return new Promise((res,rej)=>{const tx=_db.transaction(STORE,'readonly');const r=tx.objectStore(STORE).count(k);r.onsuccess=()=>res(r.result>0);r.onerror=()=>rej(r.error);})}
+
+/* ══════════════════════════════════════════════════════
+   LRU Blob URL Cache
+   上限 MAX_CACHE 枚。超えたら最古エントリを revoke して削除。
+   Safariのメモリ蓄積を防ぐ最重要箇所。
+══════════════════════════════════════════════════════ */
+const MAX_CACHE=12; // 同時保持するBlobURL上限
+const _lruKeys=[]; // 使用順（先頭=最古）
+const _urlCache=new Map(); // key→blobURL
+
+function lruGet(k){
+  if(!_urlCache.has(k))return null;
+  // 使用されたので末尾に移動
+  const idx=_lruKeys.indexOf(k);
+  if(idx>-1)_lruKeys.splice(idx,1);
+  _lruKeys.push(k);
+  return _urlCache.get(k);
+}
+
+function lruSet(k,url){
+  if(_urlCache.has(k)){
+    // 既存を末尾に
+    const idx=_lruKeys.indexOf(k);
+    if(idx>-1)_lruKeys.splice(idx,1);
+    _lruKeys.push(k);
+    return;
+  }
+  // 上限超えたら最古を evict
+  while(_lruKeys.length>=MAX_CACHE){
+    const oldest=_lruKeys.shift();
+    const old=_urlCache.get(oldest);
+    if(old)URL.revokeObjectURL(old);
+    _urlCache.delete(oldest);
+  }
+  _urlCache.set(k,url);
+  _lruKeys.push(k);
+}
+
+function lruRevoke(k){
+  const url=_urlCache.get(k);
+  if(url)URL.revokeObjectURL(url);
+  _urlCache.delete(k);
+  const idx=_lruKeys.indexOf(k);
+  if(idx>-1)_lruKeys.splice(idx,1);
+}
+
+function lruRevokeAll(){
+  for(const url of _urlCache.values())URL.revokeObjectURL(url);
+  _urlCache.clear();_lruKeys.length=0;
+}
+
+async function getBlobUrl(key){
+  const cached=lruGet(key);
+  if(cached)return cached;
+  const blob=await idbGet(key);
+  if(!blob)return null;
+  const url=URL.createObjectURL(blob);
+  lruSet(key,url);
+  return url;
+}
+
+/* ══════════════════════════════════════════════════════
+   画像圧縮 (保存前)
+   最大辺 1600px / WebP quality 0.82
+   EXIF 回転対応 (iOS カメラ写真対策)
+══════════════════════════════════════════════════════ */
+const COMPRESS_MAX=1600,COMPRESS_Q=0.82;
+
+function compressImage(file){
+  return new Promise(res=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      let {naturalWidth:w,naturalHeight:h}=img;
+      const max=COMPRESS_MAX;
+      if(w>max||h>max){
+        if(w>h){h=Math.round(h*max/w);w=max}
+        else{w=Math.round(w*max/h);h=max}
+      }
+      const c=document.createElement('canvas');
+      c.width=w;c.height=h;
+      const ctx=c.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      // WebP → fallback JPEG
+      if(c.toBlob){
+        c.toBlob(b=>res(b||file),'image/webp',COMPRESS_Q);
+      } else {
+        res(file);
+      }
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);res(file)};
+    img.src=url;
+  });
+}
+
+/* ══════════════════════════════════════════════════════
+   META
+══════════════════════════════════════════════════════ */
+function loadMeta(){try{return JSON.parse(localStorage.getItem(META_KEY))||[]}catch{return[]}}
+function saveMeta(d){try{localStorage.setItem(META_KEY,JSON.stringify(d))}catch(e){toast('保存容量不足です')}}
+let decks=loadMeta();
+
+/* ══════════════════════════════════════════════════════
+   DB 整合性チェック
+   起動時に存在しない Blob キーを持つ deck を検出・修復
+══════════════════════════════════════════════════════ */
+async function validateDecks(){
+  let dirty=false;
+  const valid=[];
+  for(const d of decks){
+    if(!d.id||!Array.isArray(d.pages)){dirty=true;continue}
+    // 先頭ページだけ確認（全チェックは重いため）
+    const firstKey=d.pages[0];
+    if(firstKey){
+      const exists=await idbHas(firstKey).catch(()=>false);
+      if(!exists){
+        // データなし → deck を除去
+        console.warn('NoteView: deck removed (missing IDB data)',d.id);
+        dirty=true;continue;
+      }
+    }
+    valid.push(d);
+  }
+  if(dirty){decks=valid;saveMeta(decks);toast('壊れたデータを除去しました')}
+}
+
+/* ══════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════ */
+let curId=null;   // 開いているdeck id
+let pageKeys=[];  // 現在deck の全ページキー配列
+let curPg=0;      // 現在ページインデックス
+let pgCnt=0;      // 総ページ数
+let busy=false;   // フリップアニメーション中フラグ
+let gridOpen=false;
+
+/* 仮想化DOM管理 — 現在±PRELOAD枚だけ pcard を保持 */
+const PRELOAD=2;             // 前後プリロード枚数
+const _domPages=new Map();   // idx → {el, img, key}
+
+/* ══════════════════════════════════════════════════════
+   SCREEN NAV
+══════════════════════════════════════════════════════ */
+function showLib(){
+  // will-change を外してアニメーション後のGPUレイヤー残留を防ぐ
+  const v=document.getElementById('scViewer');
+  v.style.willChange='transform';
+  v.classList.remove('show');
+  v.addEventListener('transitionend',()=>{v.style.willChange=''},{once:true});
+  setTab('lib');setNav('lib');renderLib();
+}
+function showViewer(){
+  if(!curId){showLib();return}
+  const v=document.getElementById('scViewer');
+  v.style.willChange='transform';
+  v.classList.add('show');
+  v.addEventListener('transitionend',()=>{v.style.willChange=''},{ once:true});
+  setTab('view');setNav('view');
+}
+function setTab(t){
+  ['tabLib','tabView','tabAdd'].forEach(id=>document.getElementById(id).classList.remove('on'));
+  if(t==='lib')document.getElementById('tabLib').classList.add('on');
+  else if(t==='view')document.getElementById('tabView').classList.add('on');
+  else document.getElementById('tabAdd').classList.add('on');
+}
+function setNav(t){
+  const L=document.getElementById('navL'),T=document.getElementById('navTitle'),R=document.getElementById('navR');
+  L.innerHTML='';T.textContent='';R.innerHTML='';
+  if(t==='lib'){
+    T.textContent='ライブラリ';
+    R.innerHTML=`<button class="nav-btn w" onclick="openCreate()">＋ 追加</button>`;
+  }else if(t==='view'){
+    const d=decks.find(x=>x.id===curId);
+    L.innerHTML=`<button class="nav-btn" onclick="showLib()">‹ 一覧</button>`;
+    T.textContent=d?d.name:'—';
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   LIBRARY
+══════════════════════════════════════════════════════ */
+function renderLib(){
+  const c=document.getElementById('libContent');
+  c.innerHTML='';
+  if(!decks.length){
+    c.innerHTML=`<div class="lib-empty">
+      <div class="lib-empty-ico">📭</div>
+      <div class="lib-empty-t">ノートがありません</div>
+      <div class="lib-empty-b">右上「＋ 追加」か<br>下の「新規作成」から追加</div>
+      <button class="lib-empty-btn" onclick="openCreate()">＋ ノートを追加</button>
+    </div>`;return;
+  }
+  const hd=document.createElement('div');hd.className='lib-hd';hd.textContent=decks.length+'冊';c.appendChild(hd);
+  const list=document.createElement('div');list.className='deck-list';c.appendChild(list);
+  decks.forEach(d=>{
+    const row=document.createElement('div');row.className='deck-card';
+    // サムネ
+    const th=document.createElement('div');th.className='deck-thumb';
+    if(d.pages&&d.pages.length){
+      const im=document.createElement('img');im.alt='';
+      th.appendChild(im); // 先に DOM に追加
+      getBlobUrl(d.pages[0]).then(u=>{if(u)im.src=u});
+    }else{th.innerHTML=`<div class="deck-thumb-ph">📄</div>`}
+    // 情報
+    const inf=document.createElement('div');inf.className='deck-info';
+    inf.innerHTML=`<div class="deck-name"></div>
+      <div class="deck-meta">${(d.pages||[]).length}ページ · </div>
+      <div class="deck-tag" style="color:;background:22"></div>`;
+    const chev=document.createElement('div');chev.className='deck-chev';chev.textContent='›';
+    const del=document.createElement('button');del.className='deck-del';del.textContent='削除';
+    del.onclick=async e=>{e.stopPropagation();if(!confirm(`「」を削除しますか？`))return;await delDeck(d.id);renderLib();};
+    row.appendChild(th);row.appendChild(inf);row.appendChild(chev);row.appendChild(del);
+    // 長押しで削除ボタン表示
+    let lt=null;
+    row.addEventListener('touchstart',()=>{lt=setTimeout(()=>{del.style.display='block';chev.style.display='none'},600)},{passive:true});
+    row.addEventListener('touchend',()=>clearTimeout(lt),{passive:true});
+    row.addEventListener('touchmove',()=>clearTimeout(lt),{passive:true});
+    row.addEventListener('click',()=>{
+      if(del.style.display==='block'){del.style.display='none';chev.style.display='';return}
+      openDeck(d.id);
+    });
+    list.appendChild(row);
+  });
+}
+
+async function delDeck(id){
+  const d=decks.find(x=>x.id===id);if(!d)return;
+  for(const k of(d.pages||[])){lruRevoke(k);await idbDel(k);}
+  decks=decks.filter(x=>x.id!==id);saveMeta(decks);
+  if(curId===id){curId=null;clearViewer();}
+}
+
+/* ══════════════════════════════════════════════════════
+   VIEWER
+══════════════════════════════════════════════════════ */
+const bookEl=document.getElementById('book');
+const stageEl=document.getElementById('stage');
+
+/* ── サイズ計算 ── */
+let _bookW=0,_bookH=0;
+function sizeBook(){
+  const sw=stageEl.clientWidth-20,sh=stageEl.clientHeight-20;
+  if(sw<=0||sh<=0){requestAnimationFrame(sizeBook);return}
+  const R=3/4;let w,h;
+  if(sw/sh>1/R){h=sh;w=h/R}else{w=sw;h=w*R}
+  w=Math.floor(w);h=Math.floor(h);
+  if(w===_bookW&&h===_bookH)return;
+  _bookW=w;_bookH=h;
+  bookEl.style.width=w+'px';bookEl.style.height=h+'px';
+}
+window.addEventListener('resize',()=>{if(pgCnt)sizeBook()},{passive:true});
+
+/* ── deck を開く ── */
+async function openDeck(id){
+  const d=decks.find(x=>x.id===id);if(!d)return;
+  curId=id;
+  showViewer();
+  // loading
+  const ld=mkLoading();
+  document.getElementById('vEmpty').style.display='none';
+  stageEl.style.display='flex';
+  document.getElementById('ctrl').style.display='flex';
+  stageEl.appendChild(ld);
+  // 仮想化初期化
+  pageKeys=d.pages||[];pgCnt=pageKeys.length;curPg=0;
+  clearDomPages();
+  // 先頭+前後PRELOAD枚のみロード
+  await loadWindowAround(0,ld);
+  ld.remove();
+  sizeBook();
+  applyStates();updCtrl();
+  buildGrid();
+  renderLib();
+}
+
+function mkLoading(msg='読み込み中…',showBar=false){
+  const div=document.createElement('div');div.className='loading';
+  div.innerHTML=`<div class="spinner"></div><div class="loading-txt"></div>`
+    +(showBar?'<div class="progress-bar"><div class="progress-fill" id="pgBarFill" style="width:0%"></div></div>':'');
+  return div;
+}
+
+function clearViewer(){
+  document.getElementById('vEmpty').style.display='flex';
+  stageEl.style.display='none';
+  document.getElementById('ctrl').style.display='none';
+  clearDomPages();
+  pageKeys=[];pgCnt=0;curPg=0;
+}
+
+/* ══════════════════════════════════════════════════════
+   仮想化 DOM ページ管理
+   curPg±PRELOAD の範囲だけ DOM に pcard を保持する。
+   それ以外は remove() してメモリを解放。
+   BlobURL は LRU キャッシュが自動 evict。
+══════════════════════════════════════════════════════ */
+
+/** 仮想ウィンドウ [low, high] を計算 */
+function getWindow(center){
+  const lo=Math.max(0,center-PRELOAD);
+  const hi=Math.min(pgCnt-1,center+PRELOAD);
+  return{lo,hi};
+}
+
+/** 範囲外の pcard を DOM から削除 */
+function evictOutsideWindow(lo,hi){
+  for(const [idx,entry] of _domPages){
+    if(idx<lo||idx>hi){
+      entry.el.remove();
+      _domPages.delete(idx);
+      // BlobURL は LRU が管理するので ここでは revoke しない
+      // （次の getBlobUrl で LRU が自動 evict）
+    }
+  }
+}
+
+/** 1枚の pcard を生成して bookEl に追加 */
+function createCard(idx){
+  const div=document.createElement('div');
+  div.className='pcard';
+  div.dataset.idx=idx;
+  // z-index: 現在より前のページは低く積む
+  div.style.zIndex=idx<curPg?(idx+2):(pgCnt+5-idx);
+  div.style.transform=idx<curPg?'rotateY(-180deg)':'rotateY(0deg)';
+  const img=document.createElement('img');
+  img.alt='p'+(idx+1);
+  img.decoding='async';
+  // src は非同期で後付け
+  div.appendChild(img);
+  bookEl.appendChild(div);
+  return{el:div,img,key:pageKeys[idx],loaded:false};
+}
+
+/** 指定インデックスの pcard がなければ作成し BlobURL をセット */
+async function ensureCard(idx){
+  if(_domPages.has(idx))return;
+  const entry=createCard(idx);
+  _domPages.set(idx,entry);
+  const url=await getBlobUrl(pageKeys[idx]);
+  if(url&&_domPages.has(idx)){ // evict されていないか確認
+    entry.img.src=url;
+    entry.loaded=true;
+  }
+}
+
+/** curPg を中心に仮想ウィンドウを更新 */
+async function loadWindowAround(center,ldEl){
+  const{lo,hi}=getWindow(center);
+  evictOutsideWindow(lo,hi);
+  const tasks=[];
+  for(let i=lo;i<=hi;i++) tasks.push(ensureCard(i));
+  // プログレスバーがあれば更新
+  const bar=ldEl?ldEl.querySelector('#pgBarFill'):null;
+  let done=0;
+  await Promise.all(tasks.map(t=>t.then(()=>{
+    done++;
+    if(bar)bar.style.width=Math.round(done/tasks.length*100)+'%';
+  })));
+}
+
+/** 全 pcard を DOM から削除 */
+function clearDomPages(){
+  for(const entry of _domPages.values())entry.el.remove();
+  _domPages.clear();
+}
+
+/* ── フリップアニメーション (2D 軽量版) ──
+   rotateY は維持するが will-change をアニメーション中だけ付与する。
+   GPU レイヤーを「めくる瞬間だけ」確保してメモリを節約。 */
+const FMS=190;
+
+function setFlipping(el,on){
+  el.style.willChange=on?'transform':'';
+}
+
+function flipOut(idx,cb){
+  const entry=_domPages.get(idx);
+  if(!entry){cb();return}
+  const el=entry.el;
+  el.style.zIndex=pgCnt+20;
+  setFlipping(el,true);
+  el.style.transition=`transform ms cubic-bezier(.4,0,.6,1)`;
+  el.style.transform='rotateY(-180deg)';
+  setTimeout(()=>{el.style.transition='none';setFlipping(el,false);cb()},FMS+12);
+}
+
+function flipIn(idx,cb){
+  const entry=_domPages.get(idx);
+  if(!entry){cb();return}
+  const el=entry.el;
+  el.style.zIndex=pgCnt+20;
+  el.style.transform='rotateY(-180deg)';
+  el.style.transition='none';
+  setFlipping(el,true);
+  requestAnimationFrame(()=>{
+    el.style.transition=`transform ms cubic-bezier(.4,0,.6,1)`;
+    el.style.transform='rotateY(0deg)';
+    setTimeout(()=>{el.style.transition='none';setFlipping(el,false);cb()},FMS+12);
+  });
+}
+
+function applyStates(){
+  for(const [idx,entry] of _domPages){
+    const b=idx<curPg;
+    entry.el.style.transition='none';
+    entry.el.style.transform=b?'rotateY(-180deg)':'rotateY(0deg)';
+    entry.el.style.zIndex=b?(idx+2):(pgCnt+5-idx);
+  }
+}
+
+/* ── ページ移動 ── */
+function goTo(target,instant){
+  target=Math.max(0,Math.min(pgCnt-1,target));
+  if(target===curPg)return;
+  if(busy&&!instant)return;
+  if(instant){
+    curPg=target;
+    // 仮想ウィンドウを非同期で更新
+    loadWindowAround(curPg).then(()=>{applyStates();updCtrl();buildGrid();});
+    return;
+  }
+  busy=true;
+  const dir=target>curPg?1:-1;
+  chainFlip(curPg,target,dir,()=>{busy=false;updCtrl();});
+}
+
+function chainFlip(from,to,dir,done){
+  if(from===to){
+    // 移動後に周辺ページを非同期プリロード
+    loadWindowAround(curPg).then(()=>{applyStates();buildGrid();});
+    done();return;
+  }
+  if(dir>0){
+    // 現在ページが DOM になければスキップ
+    if(!_domPages.has(from)){curPg=from+1;chainFlip(from+1,to,dir,done);return}
+    flipOut(from,()=>{
+      curPg=from+1;
+      // 新しい前後ページを準備（ブロックしない）
+      ensureCard(Math.min(pgCnt-1,curPg+PRELOAD)).catch(()=>{});
+      evictOutsideWindow(...Object.values(getWindow(curPg)));
+      applyStates();updCtrl();
+      chainFlip(from+1,to,dir,done);
+    });
+  }else{
+    if(!_domPages.has(from-1)){curPg=from-1;chainFlip(from-1,to,dir,done);return}
+    flipIn(from-1,()=>{
+      curPg=from-1;
+      ensureCard(Math.max(0,curPg-PRELOAD)).catch(()=>{});
+      evictOutsideWindow(...Object.values(getWindow(curPg)));
+      applyStates();updCtrl();
+      chainFlip(from-1,to,dir,done);
+    });
+  }
+}
+
+/* ── UI 更新 ── */
+function updCtrl(){
+  document.getElementById('pgPill').textContent=pgCnt?` / `:'— / —';
+  const p=pgCnt<=1?100:(curPg/(pgCnt-1))*100;
+  document.getElementById('slFill').style.width=p+'%';
+  document.getElementById('slKnob').style.left=p+'%';
+  document.getElementById('btnPrev').disabled=curPg===0;
+  document.getElementById('btnNext').disabled=curPg===pgCnt-1;
+  document.querySelectorAll('.gp-th').forEach((el,i)=>el.classList.toggle('cur',i===curPg));
+}
+
+/* ══════════════════════════════════════════════════════
+   スワイプ / タッチ
+══════════════════════════════════════════════════════ */
+let tsx=0,tsy=0,ta=false;
+bookEl.addEventListener('touchstart',e=>{
+  if(e.touches.length!==1||gridOpen)return;
+  tsx=e.touches[0].clientX;tsy=e.touches[0].clientY;ta=true;
+},{passive:true});
+bookEl.addEventListener('touchmove',e=>{
+  if(!ta)return;
+  const dx=e.touches[0].clientX-tsx,dy=e.touches[0].clientY-tsy;
+  if(Math.abs(dy)>Math.abs(dx)*1.5){ta=false;return}
+  e.preventDefault();
+},{passive:false});
+bookEl.addEventListener('touchend',e=>{
+  if(!ta)return;ta=false;
+  const dx=e.changedTouches[0].clientX-tsx;
+  if(Math.abs(dx)<30)return;
+  dx<0?goTo(curPg+1):goTo(curPg-1);
+},{passive:true});
+// touch-action: book のみ none にする
+bookEl.style.touchAction='none';
+
+// マウスドラッグ
+let mx=0,md=false;
+bookEl.addEventListener('mousedown',e=>{mx=e.clientX;md=true;e.preventDefault()});
+window.addEventListener('mouseup',e=>{
+  if(!md)return;md=false;
+  const dx=e.clientX-mx;if(Math.abs(dx)<30)return;
+  dx<0?goTo(curPg+1):goTo(curPg-1);
+});
+
+document.getElementById('btnPrev').onclick=()=>goTo(curPg-1);
+document.getElementById('btnNext').onclick=()=>goTo(curPg+1);
+
+/* スライダー */
+(()=>{
+  const tr=document.getElementById('slTrack');
+  let pd=false;
+  function hit(cx){const r=tr.getBoundingClientRect();goTo(Math.round(Math.max(0,Math.min(1,(cx-r.left)/r.width))*(pgCnt-1)),true)}
+  tr.addEventListener('click',e=>hit(e.clientX));
+  tr.addEventListener('touchstart',e=>{pd=true;hit(e.touches[0].clientX)},{passive:true});
+  tr.addEventListener('touchmove',e=>{if(!pd)return;hit(e.touches[0].clientX);e.preventDefault()},{passive:false});
+  tr.addEventListener('touchend',()=>{pd=false},{passive:true});
+})();
+
+/* キーボード */
+document.addEventListener('keydown',e=>{
+  if(e.target.matches('input'))return;
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();goTo(curPg+1)}
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();goTo(curPg-1)}
+  if(e.key==='g')toggleGrid();
+  if(e.key==='Escape')closeGrid();
+});
+
+/* ══════════════════════════════════════════════════════
+   ページグリッド (サムネイル一覧)
+   大量ページでも軽快に動くよう IntersectionObserver で
+   表示域に入ったサムネのみ画像をロードする。
+══════════════════════════════════════════════════════ */
+let _thumbObserver=null;
+const _thumbUrls=new Map(); // idx→url (グリッド専用キャッシュ)
+
+function buildGrid(){
+  const g=document.getElementById('gpGrid');
+  g.innerHTML='';
+  // IntersectionObserver をリセット
+  if(_thumbObserver){_thumbObserver.disconnect();_thumbObserver=null}
+
+  _thumbObserver=new IntersectionObserver(entries=>{
+    entries.forEach(entry=>{
+      if(!entry.isIntersecting)return;
+      const idx=parseInt(entry.target.dataset.idx,10);
+      const img=entry.target.querySelector('img');
+      if(img&&!img.src){
+        getBlobUrl(pageKeys[idx]).then(u=>{if(u&&img)img.src=u});
+      }
+      _thumbObserver.unobserve(entry.target);
+    });
+  },{root:g.parentElement,rootMargin:'40px'});
+
+  pageKeys.forEach((k,i)=>{
+    const t=document.createElement('div');
+    t.className='gp-th'+(i===curPg?' cur':'');
+    t.dataset.idx=i;
+    const img=document.createElement('img');
+    img.alt='P'+(i+1);img.style.background='#f8f3e8';
+    // src は IO で遅延設定
+    const n=document.createElement('div');n.className='gp-n';n.textContent='P'+(i+1);
+    t.appendChild(img);t.appendChild(n);
+    t.onclick=()=>{goTo(i,true);closeGrid()};
+    g.appendChild(t);
+    _thumbObserver.observe(t);
+  });
+
+  document.getElementById('gpTitle').textContent=`ページ一覧（枚）`;
+}
+
+function toggleGrid(){gridOpen?closeGrid():openGrid()}
+function openGrid(){
+  gridOpen=true;
+  document.getElementById('gridPanel').classList.add('open');
+  document.getElementById('btnGrid').classList.add('grid-on');
+  const cur=document.querySelector('.gp-th.cur');
+  if(cur)cur.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+function closeGrid(){
+  gridOpen=false;
+  document.getElementById('gridPanel').classList.remove('open');
+  document.getElementById('btnGrid').classList.remove('grid-on');
+}
+document.getElementById('btnGrid').onclick=toggleGrid;
+document.getElementById('gpClose').onclick=closeGrid;
+
+/* ══════════════════════════════════════════════════════
+   CREATE SHEET
+══════════════════════════════════════════════════════ */
+const COLORS=['#ff9500','#ff3b30','#34c759','#007aff','#af52de','#ff2d55','#5ac8fa','#ffcc00'];
+let _color=COLORS[0],_pendingFiles=[];
+
+(()=>{
+  const row=document.getElementById('colorRow');
+  COLORS.forEach(c=>{
+    const s=document.createElement('div');s.className='csw'+(c===_color?' on':'');s.style.background=c;
+    s.onclick=()=>{_color=c;row.querySelectorAll('.csw').forEach(x=>x.classList.remove('on'));s.classList.add('on')};
+    row.appendChild(s);
+  });
+})();
+
+function openCreate(){
+  resetForm();
+  document.getElementById('scCreate').classList.add('show');
+  setTab('add');
+}
+function closeCreate(){
+  document.getElementById('scCreate').classList.remove('show');
+  if(curId)setTab('view');else setTab('lib');
+}
+function resetForm(){
+  document.getElementById('cName').value='';
+  document.getElementById('cSubj').value='';
+  _pendingFiles=[];
+  const dz=document.getElementById('dropzone');
+  dz.classList.remove('has','drag');
+  document.getElementById('dzCnt').textContent='';
+  document.getElementById('btnCreate').disabled=true;
+  document.getElementById('sheetBody').scrollTop=0;
+}
+function chkCreate(){
+  document.getElementById('btnCreate').disabled=!(document.getElementById('cName').value.trim()&&_pendingFiles.length);
+}
+document.getElementById('cName').addEventListener('input',chkCreate);
+document.getElementById('createMask').onclick=()=>{closeCreate();resetForm()};
+document.getElementById('btnCancel').onclick=()=>{closeCreate();resetForm()};
+
+// dropzone
+const dz=document.getElementById('dropzone');
+const fi=document.getElementById('fileInput');
+dz.addEventListener('click',()=>fi.click());
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');doFiles(e.dataTransfer.files)});
+fi.addEventListener('change',()=>doFiles(fi.files));
+
+function doFiles(f){
+  const arr=[...f].filter(x=>x.type.startsWith('image/'));
+  if(!arr.length)return;
+  _pendingFiles=arr;
+  dz.classList.add('has');
+  document.getElementById('dzCnt').textContent=`✓ 枚の画像を選択`;
+  chkCreate();
+}
+
+/* 作成実行 */
+document.getElementById('btnCreate').onclick=async()=>{
+  const btn=document.getElementById('btnCreate');
+  btn.disabled=true;btn.textContent='圧縮・保存中…';
+
+  const id='dk'+Date.now();
+  const name=document.getElementById('cName').value.trim();
+  const subj=document.getElementById('cSubj').value.trim()||'未分類';
+  const keys=[];
+
+  // 圧縮 → IDB 保存（逐次処理でメモリを抑える）
+  for(let i=0;i<_pendingFiles.length;i++){
+    btn.textContent=`保存中… /`;
+    const compressed=await compressImage(_pendingFiles[i]);
+    const k=`_`;
+    await idbSet(k,compressed);
+    keys.push(k);
+  }
+
+  const deck={id,name,subject:subj,color:_color,pages:keys,created:new Date().toLocaleDateString('ja-JP')};
+  decks.push(deck);saveMeta(decks);
+  btn.textContent='作成する';
+  closeCreate();resetForm();
+  await openDeck(id);
+};
+
+/* ══════════════════════════════════════════════════════
+   UTILITY
+══════════════════════════════════════════════════════ */
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+let _toastTimer=null;
+function toast(msg,ms=2200){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>el.classList.remove('show'),ms);
+}
+
+/* ══════════════════════════════════════════════════════
+   SERVICE WORKER (stale-while-revalidate, version管理)
+══════════════════════════════════════════════════════ */
+const SW_VERSION='nv3-v1';
+function registerSW(){
+  if(!('serviceWorker' in navigator))return;
+  const src=`
+const CACHE='';
+const SHELL=[location.pathname];
+/* install: shell をキャッシュ */
+self.addEventListener('install',e=>{
+  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL).catch(()=>{})));
+  self.skipWaiting();
+});
+/* activate: 古いキャッシュを削除 */
+self.addEventListener('activate',e=>{
+  e.waitUntil(
+    caches.keys().then(ks=>Promise.all(
+      ks.filter(k=>k!==CACHE).map(k=>caches.delete(k))
+    ))
+  );
+  self.clients.claim();
+});
+/* fetch: stale-while-revalidate */
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET')return;
+  /* IndexedDB / blob: は SW 経由にしない */
+  const url=e.request.url;
+  if(url.startsWith('blob:')||url.includes('indexeddb'))return;
+  e.respondWith(
+    caches.open(CACHE).then(async cache=>{
+      const cached=await cache.match(e.request);
+      const fetchPromise=fetch(e.request).then(res=>{
+        if(res.ok)cache.put(e.request,res.clone());
+        return res;
+      }).catch(()=>null);
+      return cached||fetchPromise||new Response('Offline',{status:503});
+    })
+  );
+});
+`;
+  try{
+    const blob=new Blob([src],{type:'application/javascript'});
+    const swUrl=URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl,{scope:'./'})
+      .then(()=>URL.revokeObjectURL(swUrl))
+      .catch(()=>{});
+  }catch(e){}
+}
+
+/* ══════════════════════════════════════════════════════
+   Safari crash 対策: visibilitychange でリソース解放
+   タブが非表示になったら不要な BlobURL を revoke。
+══════════════════════════════════════════════════════ */
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){
+    // 現在ページ±1 以外の BlobURL キャッシュを解放
+    const keep=new Set();
+    for(let i=Math.max(0,curPg-1);i<=Math.min(pgCnt-1,curPg+1);i++){
+      keep.add(pageKeys[i]);
+    }
+    for(const k of [..._urlCache.keys()]){
+      if(!keep.has(k))lruRevoke(k);
+    }
+  }
+});
+
+/* ══════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════ */
+(async()=>{
+  await openDB();
+  await validateDecks();
+  decks=loadMeta(); // validate後に再ロード
+  renderLib();
+  setNav('lib');
+  registerSW();
+  // 最後に開いていたデッキを復元
+  if(decks.length) await openDeck(decks[decks.length-1].id);
+})();
+</script>
+</body>
+</html>
