@@ -314,22 +314,29 @@ async function getBlobUrl(key){
 /* ─────────────────────────────────────────
    画像圧縮 (最大辺1600px / WebP 0.82)
 ───────────────────────────────────────── */
-function compressImage(file){
+function compressImage(blob){
   return new Promise(res=>{
-    const tmpUrl=URL.createObjectURL(file);
+    const tmpUrl=URL.createObjectURL(blob);
     const img=new Image();
     img.onload=()=>{
-      URL.revokeObjectURL(tmpUrl);
       let w=img.naturalWidth,h=img.naturalHeight;
       const MAX=1600;
       if(w>MAX||h>MAX){w>h?(h=Math.round(h*MAX/w),w=MAX):(w=Math.round(w*MAX/h),h=MAX)}
       const cv=document.createElement('canvas');
       cv.width=w;cv.height=h;
       cv.getContext('2d').drawImage(img,0,0,w,h);
-      if(cv.toBlob){cv.toBlob(b=>res(b||file),'image/webp',0.82)}
-      else res(file);
+      // ★ toBlob のコールバックが終わってから revoke する
+      if(cv.toBlob){
+        cv.toBlob(b=>{
+          URL.revokeObjectURL(tmpUrl);
+          res(b||blob);
+        },'image/webp',0.82);
+      }else{
+        URL.revokeObjectURL(tmpUrl);
+        res(blob);
+      }
     };
-    img.onerror=()=>{URL.revokeObjectURL(tmpUrl);res(file)};
+    img.onerror=()=>{URL.revokeObjectURL(tmpUrl);res(blob)};
     img.src=tmpUrl;
   });
 }
@@ -854,10 +861,23 @@ fi.addEventListener('change',()=>doFiles(fi.files));
 function doFiles(f){
   const arr=[...f].filter(x=>x.type.startsWith('image/'));
   if(!arr.length)return;
-  _files=arr;
-  dz.classList.add('has');
-  document.getElementById('dzCnt').textContent='✓ '+arr.length+'枚の画像を選択';
-  chkCreate();
+  // iOS Safari の FileList は参照が不安定なので
+  // 各 File を即座に ArrayBuffer として読み込んでコピーを作る。
+  // これをしないと複数ファイル選択時に同じファイルが繰り返されるバグが起きる。
+  Promise.all(arr.map(file=>
+    new Promise(res=>{
+      const fr=new FileReader();
+      fr.onload=e=>res(new Blob([e.target.result],{type:file.type}));
+      fr.onerror=()=>res(null);
+      fr.readAsArrayBuffer(file);
+    })
+  )).then(blobs=>{
+    _files=blobs.filter(Boolean);
+    if(!_files.length)return;
+    dz.classList.add('has');
+    document.getElementById('dzCnt').textContent='✓ '+_files.length+'枚の画像を選択';
+    chkCreate();
+  });
 }
 
 document.getElementById('btnCreate').onclick=async()=>{
