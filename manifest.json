@@ -1,0 +1,15 @@
+{
+  "name": "NoteView",
+  "short_name": "NoteView",
+  "display": "standalone",
+  "background_color": "#f2f2f7",
+  "theme_color": "#f2f2f7",
+  "start_url": "./",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
