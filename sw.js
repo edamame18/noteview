@@ -1,4 +1,4 @@
-const CACHE = 'noteview-v4';
+const CACHE = 'noteview-v5';
 
 self.addEventListener('install', e => {
   e.waitUntil(
